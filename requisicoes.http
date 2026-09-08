@@ -1,0 +1,138 @@
+### Leque de Vagas — a API, no estado da aula 02
+#
+# IntelliJ roda direto; VS Code precisa da extensão REST Client.
+# Suba a aplicação com `./mvnw spring-boot:run` antes de clicar em Send Request.
+#
+# As sete chamadas de leitura da aula 02. As da aula 03 estão no fim do
+# arquivo, comentadas.
+
+### frente 1 — as 12 vagas
+GET http://localhost:8080/vagas
+
+### frente 1 — uma vaga
+GET http://localhost:8080/vagas/1
+
+### frente 1 — uma vaga que NÃO existe
+# Devolve 200 com [], e é esse o defeito combinado da aula 02: quem chama não
+# consegue distinguir "não existe" de "existe e está vazio". A aula 03 conserta.
+GET http://localhost:8080/vagas/nao-existe
+
+### frente 2 — as 5 empresas
+GET http://localhost:8080/empresas
+
+### frente 2 — uma empresa pelo slug
+GET http://localhost:8080/empresas/aurora-tech
+
+### frente 3 — as 6 pessoas
+GET http://localhost:8080/pessoas
+
+### frente 3 — uma pessoa
+GET http://localhost:8080/pessoas/1
+
+### frente 4 — os números do catálogo
+GET http://localhost:8080/estatisticas
+
+
+# =============================================================================
+# AULA 03 · os quatro status e os verbos que faltavam
+#
+# Descomente conforme cada frente ativar o seu bloco no código. O que se
+# confere aqui é o STATUS, não só o corpo: é nele que está a entrega da aula.
+# =============================================================================
+
+# ### frente 1 · uma que NÃO existe — 404  <- o conserto da aula 02
+# GET http://localhost:8080/vagas/nao-existe
+#
+# ### frente 1 · criar — 201 + cabeçalho Location
+# # Repare: o corpo não manda id. Quem inventa o id é a API.
+# POST http://localhost:8080/vagas
+# Content-Type: application/json
+#
+# {
+#   "titulo": "Pessoa Desenvolvedora Java Pleno",
+#   "descricao": "Serviços de cobrança em Spring Boot, com fila e observabilidade.",
+#   "area": "Back-end",
+#   "senioridade": "Pleno",
+#   "local": "Remoto",
+#   "aceitaIniciante": false,
+#   "empresaSlug": "tucano-systems"
+# }
+#
+# ### frente 1 · trocar — 200 (404 se o id não existir)
+# PUT http://localhost:8080/vagas/1
+# Content-Type: application/json
+#
+# {
+#   "titulo": "Pessoa Desenvolvedora Front-end Pleno",
+#   "descricao": "Telas do produto em React e Next.js, pareando com gente mais experiente.",
+#   "area": "Front-end",
+#   "senioridade": "Pleno",
+#   "local": "Remoto",
+#   "aceitaIniciante": false,
+#   "empresaSlug": "aurora-tech"
+# }
+#
+# ### frente 1 · apagar — 204, e 404 na segunda vez
+# DELETE http://localhost:8080/vagas/12
+#
+# ### frente 2 · slug que não existe — 404
+# GET http://localhost:8080/empresas/nao-existe
+#
+# ### frente 2 · criar — 201, e o Location aponta para o slug que O CLIENTE escolheu
+# POST http://localhost:8080/empresas
+# Content-Type: application/json
+#
+# {
+#   "nome": "Farol Tech",
+#   "slug": "farol-tech",
+#   "site": "farol.tech",
+#   "descricao": "Software para portos e terminais."
+# }
+#
+# ### frente 2 · apagar — 204
+# DELETE http://localhost:8080/empresas/farol-tech
+#
+# ### frente 3 · uma pessoa que NÃO existe — 404
+# GET http://localhost:8080/pessoas/nao-existe
+#
+# ### frente 3 · criar — 201 + Location
+# POST http://localhost:8080/pessoas
+# Content-Type: application/json
+#
+# {
+#   "nome": "Helena Costa",
+#   "email": "helena@exemplo.com",
+#   "area": "Back-end",
+#   "senioridade": "Júnior"
+# }
+#
+# ### frente 3 · trocar — 200
+# PUT http://localhost:8080/pessoas/1
+# Content-Type: application/json
+#
+# {
+#   "nome": "Ana Nogueira",
+#   "email": "ana@exemplo.com",
+#   "area": "Dados",
+#   "senioridade": "Pleno"
+# }
+#
+# ### frente 3 · apagar — 204
+# DELETE http://localhost:8080/pessoas/6
+#
+# ### frente 4 · busca com um filtro — 200, três vagas
+# GET http://localhost:8080/vagas/busca?area=Dados
+#
+# ### frente 4 · busca com dois filtros — 200, uma vaga
+# GET http://localhost:8080/vagas/busca?area=Dados&senioridade=Júnior
+#
+# ### frente 4 · busca por booleano — 200
+# GET http://localhost:8080/vagas/busca?aceitaIniciante=true
+#
+# ### frente 4 · busca sem filtro nenhum — 200, a lista inteira
+# GET http://localhost:8080/vagas/busca
+#
+# ### frente 4 · busca sem resultado — 200 com [], e isso está CERTO
+# # Você procurou, o resultado é zero. Diferente de pedir um id que não
+# # existe, que é 404.
+# GET http://localhost:8080/vagas/busca?area=Computação Quântica
