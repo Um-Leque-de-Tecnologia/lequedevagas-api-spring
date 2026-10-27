@@ -4,10 +4,9 @@ Projeto de referência do curso **Introdução ao Spring Boot** (NickDev). É o
 outro lado do mural de vagas: o programa que guarda as vagas, as empresas e as
 pessoas, e as entrega para quem pedir.
 
-O código que roda aqui está **no ponto da aula 02**: o esqueleto em camadas,
-com dados fixos em memória e só as rotas de leitura. **A aula 03 já está no
-repositório, comentada**, arquivo por arquivo, sob um cabeçalho `AULA 03` que
-diz o que descomentar e o que apagar no lugar.
+O código que roda aqui está **no ponto da AV1** (fim da aula 05): as quatro
+frentes com CRUD, DTO de entrada e de saída, Bean Validation, erros em Problem
+Details e as três entidades guardadas no H2 com Spring Data JPA.
 
 Ele existe para você comparar com o seu: abrir um arquivo, ver como ficou aqui
 e entender por quê. Não é para clonar e entregar — o que vale nota é o da sua
@@ -30,8 +29,50 @@ Precisa de **JDK 21**. Sobe em <http://localhost:8080> — procure a linha
 
 Depois de subir, abra o `requisicoes.http` e clique em **Send Request** em cima
 de cada chamada. O IntelliJ roda direto; no VS Code, instale a extensão REST
-Client. Nada de Insomnia ou Postman: um arquivo de texto faz o mesmo e vai
-versionado no Git, o que Insomnia nenhum faz de graça.
+Client. Cada chamada diz o status esperado.
+
+O banco é o H2 em memória: some quando a aplicação para e volta com a carga de
+`src/main/resources/dados/` na próxima subida. Para olhar as tabelas, abra
+<http://localhost:8080/h2-console> com a URL `jdbc:h2:mem:vagas`, usuário `sa`
+e senha vazia.
+
+## Estrutura: uma pasta por camada
+
+```
+src/main/java/br/edu/faculdade/vagas/
+├── VagasApplication.java     o ponto de partida, na raiz, acima de tudo
+├── controller/               @RestController — o único que fala HTTP
+├── service/                  @Service — onde a regra mora
+├── repository/               interfaces JpaRepository — onde o dado está
+├── dto/                      records de entrada e de saída — o contrato da API
+├── model/                    @Entity — as linhas das tabelas
+└── exception/                o TratadorDeErros e as exceções da casa
+src/main/resources/
+├── application.properties    banco, console, SQL no log, ordem da carga
+└── dados/                    um arquivo de carga por frente
+```
+
+**Por que as pastas funcionam sem configuração.** O `@SpringBootApplication`
+liga o `@ComponentScan`, que procura beans no pacote da `VagasApplication` e em
+todos os subpacotes. Por isso ela fica na raiz. Uma classe num pacote **fora**
+de `br.edu.faculdade.vagas` não é encontrada, e a subida falha com
+`required a bean of type '...' that could not be found`.
+
+**Quem pode depender de quem.** A seta só aponta para baixo:
+
+```
+controller  →  service  →  repository  →  model
+     └──────── dto ────────┘
+```
+
+- O **controller** conhece o service e os DTOs. Nunca o repository, nunca o model.
+- O **service** conhece o repository, o model e os DTOs. É ele que traduz um no outro.
+- O **repository** conhece só o model.
+- O **dto** conhece o model só para traduzir (`VagaResposta.de(vaga)`), num lugar só.
+- O **model** não conhece ninguém.
+
+Se um `import ...repository...` aparecer num controller, a regra foi para o
+lugar errado.
 
 ## As quatro frentes
 
@@ -41,153 +82,79 @@ uma é de alguém, e o `git log` é a evidência disso.
 
 | Frente | Recurso | Arquivos |
 | --- | --- | --- |
-| 1 | Vaga | `Vaga`, `VagaEntrada`, `VagaResposta`, `VagaRepository`, `VagaService`, `VagaController` |
-| 2 | Empresa | `Empresa`, `EmpresaRepository`, `EmpresaService`, `EmpresaController` |
-| 3 | Pessoa | `Pessoa`, `PessoaRepository`, `PessoaService`, `PessoaController` |
-| 4 | Busca e números | `EstatisticasService`, `EstatisticasController` — e, na aula 03, `BuscaService` e `BuscaController` |
+| 1 | Vaga | `model/Vaga`, `dto/VagaEntrada`, `dto/VagaResposta`, `repository/VagaRepository`, `service/VagaService`, `controller/VagaController`, `dados/vagas.sql` |
+| 2 | Empresa | `model/Empresa`, `dto/EmpresaEntrada`, `dto/EmpresaResposta`, `repository/EmpresaRepository`, `service/EmpresaService`, `controller/EmpresaController`, `dados/empresas.sql` |
+| 3 | Pessoa | `model/Pessoa`, `dto/PessoaEntrada`, `dto/PessoaResposta`, `repository/PessoaRepository`, `service/PessoaService`, `controller/PessoaController`, `dados/pessoas.sql` |
+| 4 | Busca e números | `service/BuscaService`, `service/EstatisticasService`, `controller/BuscaController`, `controller/EstatisticasController` |
+
+Compartilhados — uma pessoa por vez, com `git pull` antes: `pom.xml`,
+`application.properties` e `exception/TratadorDeErros`.
 
 A frente 4 não tem recurso próprio: ela lê o `VagaRepository` da frente 1. É de
 propósito — buscar é uma responsabilidade, não uma tabela.
 
-## O que está ativo: a aula 02
+## As rotas
 
-O esqueleto do projeto, com dados fixos em memória mas já separado em
-controller, service e repository. Toda dependência chega pronta pelo construtor,
-em campo `final`. Nenhum `new` entre as classes.
-
-| Rota | Frente | Devolve |
+| Rota | Frente | Status |
 | --- | --- | --- |
-| `GET /vagas` | 1 | as 12 vagas |
-| `GET /vagas/{id}` | 1 | uma lista de uma vaga — ou `[]` |
-| `GET /empresas` | 2 | as 5 empresas |
-| `GET /empresas/{slug}` | 2 | uma lista de uma empresa — ou `[]` |
-| `GET /pessoas` | 3 | as 6 pessoas |
-| `GET /pessoas/{id}` | 3 | uma lista de uma pessoa — ou `[]` |
-| `GET /estatisticas` | 4 | os números do catálogo |
+| `GET /vagas` | 1 | 200 |
+| `GET /vagas/{id}` | 1 | 200 · 404 · 400 se o id não for número |
+| `POST /vagas` | 1 | 201 com `Location` · 400 |
+| `PUT /vagas/{id}` | 1 | 200 · 404 · 400 |
+| `DELETE /vagas/{id}` | 1 | 204 · 404 |
+| `GET /empresas` | 2 | 200 |
+| `GET /empresas/{slug}` | 2 | 200 · 404 |
+| `POST /empresas` | 2 | 201 com `Location` · 400 · 409 slug repetido |
+| `DELETE /empresas/{slug}` | 2 | 204 · 404 |
+| `GET /pessoas` | 3 | 200 |
+| `GET /pessoas/{id}` | 3 | 200 · 404 |
+| `POST /pessoas` | 3 | 201 com `Location` · 400 · 409 e-mail repetido |
+| `PUT /pessoas/{id}` | 3 | 200 · 404 · 400 |
+| `DELETE /pessoas/{id}` | 3 | 204 · 404 |
+| `GET /vagas/busca?area=&senioridade=&aceitaIniciante=` | 4 | 200 — inclusive `[]` · 400 com filtro de mais de 60 caracteres |
+| `GET /estatisticas` | 4 | 200 |
 
-**Todas respondem 200 — inclusive as que não acham nada.** Isso não é descuido:
-é o defeito combinado da aula 02. Buscar por id devolve lista porque ainda não
-há como dizer "não achei", e lista vazia é a resposta honesta enquanto isso —
-devolver `null` seria a desonesta. É exatamente o que a aula 03 conserta.
-
-## O que está comentado: a aula 03
-
-Em cada arquivo, depois do código que roda, há um bloco assim:
-
-```java
-// =========================================================================
-// AULA 03 · o service passa a saber dizer "não achei"
-// ...
-// Para ativar: descomente o bloco abaixo e apague o buscarPorId da aula 02.
-// =========================================================================
-```
-
-O que cada bloco traz:
-
-| Onde | O que a aula 03 muda |
-| --- | --- |
-| `VagaRepository` | `List.of(...)` é imutável — vira campo `new ArrayList<>(List.of(...))`, e `todas()` passa a devolver `List.copyOf`, com `porId`, `salvar`, `trocar` e `remover` |
-| `VagaService` | `Optional` em vez de lista, o id nascendo com `UUID.randomUUID()`, e o id do `PUT` vindo da URL |
-| `VagaController` | `ResponseEntity` escolhendo entre 200 e 404, `201` com cabeçalho `Location`, `204` sem corpo |
-| `Empresa*` | o mesmo, com o `Location` montado a partir do **slug que o cliente escolheu** — e sem `PUT`, porque trocar o slug seria trocar o endereço do recurso |
-| `Pessoa*` | o CRUD completo, e o `idempotencia.http`, que prova o que PUT e DELETE têm e POST não tem |
-| `BuscaService` e `BuscaController` | arquivos **inteiramente** da aula 03: três `@RequestParam` opcionais, num controller que convive com o da frente 1 no mesmo `/vagas` |
-| `requisicoes.http` | as chamadas novas, comentadas no fim do arquivo |
-
-Descomentar um bloco sozinho não compila: as três camadas de uma frente mudam
-juntas. Ative repository, service e controller da mesma frente de uma vez — que
-é, aliás, como a pessoa dona daquela frente vai trabalhar.
-
-A tabela de status que a aula 03 entrega:
-
-| Rota | Status |
-| --- | --- |
-| `GET /vagas/{id}` · `GET /empresas/{slug}` · `GET /pessoas/{id}` | 200 · 404 |
-| `POST /vagas` · `POST /empresas` · `POST /pessoas` | 201, com `Location` |
-| `PUT /vagas/{id}` · `PUT /pessoas/{id}` | 200 · 404 |
-| `DELETE` nas três frentes | 204 · 404 |
-| `GET /vagas/busca` | 200 — inclusive `[]`, que aqui está certo |
+Todo erro sai em `application/problem+json`, pelo `TratadorDeErros`. Nenhuma rota
+devolve 500 nem pilha no corpo.
 
 ## O que NÃO tem, de propósito
 
 Se você achar que está faltando, provavelmente está — mas na aula seguinte.
 
-- **DTO.** Na aula 03 o mesmo `record` é usado no corpo que entra e no que sai,
-  aceitando que o `id` chega `null` no POST e é ignorado. Funciona, e é o
-  suficiente por lá. Aula 04.
-- **Validação.** Aula 04.
-- **Tratamento de erro padronizado.** O 404 da aula 03 vem sem corpo. Problem
-  Details é aula 04.
-- **Banco de dados.** A fonte são três listas em memória. Aula 05 — e quando
-  ela chegar, só o `Repository` muda.
 - **Relacionamento entre Vaga e Empresa.** A vaga guarda `empresaSlug`, um
-  texto solto. `@ManyToOne` é aula 06.
-- **Candidatura.** A entidade existe no briefing, mas só aparece na aula 06.
+  texto solto, e nada impede um slug que não existe. `@ManyToOne` é a aula 07.
+- **Candidatura.** A entidade existe no briefing, e chega na aula 07.
+- **Filtrar e contar dentro do banco.** A busca e as estatísticas trazem a
+  tabela inteira e filtram em Java — a aula 05 mediu isso. Query methods,
+  `@Query`, paginação e transações são a aula 08.
+- **Testes.** Só o `contextLoads` que veio do Initializr. Aula 09.
 - **Autenticação.** `GET /pessoas` é público e não há campo de senha. Aulas 10
   e 11.
-- **Testes.** Só o `contextLoads` que veio do Initializr. Aula 09.
 
 ## Detalhes que costumam pegar
 
 **O starter mudou de nome no Spring Boot 4.** O `pom.xml` traz
 `spring-boot-starter-webmvc` e `spring-boot-starter-webmvc-test`, e não
-`spring-boot-starter-web` e `spring-boot-starter-test`. Material e tutorial que
-mostram os nomes antigos são de Boot 3 — funcionam, mas não é o que o
-Initializr gera hoje.
+`spring-boot-starter-web` e `spring-boot-starter-test`. E o console do H2 precisa
+do módulo `spring-boot-h2console`: sem ele, `/h2-console` responde 404.
 
-**`required a bean of type 'VagaRepository'`.** Faltou o `@Repository`, ou a
-classe está fora do pacote da `Application`. São as duas causas, sempre.
+**`required a bean of type 'VagaRepository'`.** A classe está fora do pacote
+da `Application`, ou (na interface) não estende `JpaRepository`.
 
-**Um `record` anotado.** `@Component` num record é sinal de que a diferença
-entre dado e serviço não ficou clara. Record guarda; estereótipo é para quem
-faz.
+**`GET /vagas/nao-existe` dá 400, e não 404.** Esperado: o id é `Long`, e o
+texto nem chega ao controller. O 404 se confere com `/vagas/999`.
 
-**`Map.of` reclamando de tipo.** Ele infere o tipo dos valores, e no
-`EstatisticasService` eles são mistos — número, contagem e mapa. Por isso o
-retorno é declarado `Map<String, Object>`.
+**`DELETE /vagas/999` devolve 204.** Faltou o `existsById`: o `deleteById` de um
+id que não existe só faz um select e volta sem erro.
 
-**Os números não fecham.** As contagens por área e por senioridade têm que
-somar o total de vagas. Se não somam, alguma vaga tem área escrita de dois
-jeitos — `"Front-end"` e `"front-end"` são chaves diferentes.
+**O primeiro POST dá 409 e o log fala em `PRIMARY KEY ON PUBLIC.VAGA(ID)`.** O
+`.sql` de carga tem a coluna id escrita à mão. Tire a coluna.
 
-**O `id` é texto.** O que vem da URL é sempre texto, então `"1"` e não `1`.
-Comparar com `==` em vez de `.equals()` nunca bate, e `/vagas/1` devolve `[]`
-sem erro nenhum.
+**No console: `Database "~/test" not found`.** O formulário vem com
+`jdbc:h2:~/test`. Use `jdbc:h2:mem:vagas`, o endereço que o log mostra.
 
-**Os slugs combinam na mão.** Todo `empresaSlug` do `VagaRepository` tem que
-existir como `slug` no `EmpresaRepository`, escrito igual. Quando desencontram,
-nada quebra agora — quebra na aula 06, longe de onde foi criado.
-
-Os erros que aparecem só depois de ativar a aula 03 — `Ambiguous mapping`,
-`UnsupportedOperationException` no POST, `415` sem `Content-Type`, o PUT que
-grava `null` no id — estão comentados junto do bloco de cada frente.
-
-## Estrutura
-
-```
-requisicoes.http                 as chamadas da aula 02, versionadas
-idempotencia.http                a evidência da frente 3 (aula 03, comentado)
-pom.xml                          Spring Boot 4.1.1, Java 21
-src/main/
-├── java/br/edu/faculdade/vagas/
-│   ├── VagasApplication.java    veio pronta do Initializr
-│   ├── Vaga.java                frente 1 · record, sem anotação
-│   ├── VagaRepository.java      @Repository — onde o dado está
-│   ├── VagaService.java         @Service — onde a decisão mora
-│   ├── VagaController.java      @RestController — o único que fala HTTP
-│   ├── Empresa*.java            frente 2 · o identificador é o slug
-│   ├── Pessoa*.java             frente 3 · a mesma forma, terceira vez
-│   ├── EstatisticasService.java frente 4 · lê o repository da frente 1
-│   ├── EstatisticasController.java
-│   ├── BuscaService.java        frente 4 · aula 03, inteiro comentado
-│   └── BuscaController.java     frente 4 · aula 03, inteiro comentado
-└── resources/
-    └── application.properties
-```
-
-Tudo no mesmo pacote da `Application` — é o que o `@ComponentScan` embutido no
-`@SpringBootApplication` enxerga. Subpastas por camada também funcionam, desde
-que fiquem dentro dele.
+**O id pulou um número.** Um INSERT recusado (e-mail repetido) já tinha pedido
+um número ao banco, e número pedido não volta. Id identifica; não conta.
 
 ## Licença
 
